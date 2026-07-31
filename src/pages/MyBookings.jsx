@@ -5,72 +5,87 @@ import Navbar from '../components/Navbar';
 const MyBookings = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [errorMessage, setErrorMessage] = useState(''); // 👈 New: Tells you EXACTLY why it failed
 
   useEffect(() => {
     fetchBookings();
   }, []);
-const fetchBookings = async () => {
+
+  const fetchBookings = async () => {
     try {
       setLoading(true);
+      setErrorMessage('');
       const token = localStorage.getItem('token');
-      let userId = null;
 
-      // 1. Try to get it from local storage user object
-      try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        userId = user._id || user.id;
-      } catch (e) { console.warn("No user object in local storage"); }
-
-      // 2. 🚀 BULLETPROOF FALLBACK: Decode the JWT Token to get the ID!
-      if (!userId && token) {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        userId = payload.userId || payload.id || payload._id;
-      }
-
-      if (!userId || !token) {
-        console.error("Missing User ID or Token");
+      if (!token) {
+        setErrorMessage("You are not logged in. Please log in to view your tickets.");
         setLoading(false);
         return;
       }
 
+      // 1. Decode JWT to get ID reliably (Bypasses localStorage user object bugs)
+      let userId;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userId = payload.userId || payload.id || payload._id;
+      } catch (e) {
+        console.error("Token decode error:", e);
+      }
+
+      if (!userId) {
+        setErrorMessage("Invalid session. Please log out and log in again.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Fetch the populated bookings
       const endpoint = `/booking/get-user-booking/${userId}`;
       const res = await axiosClient.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.data?.success) {
-        setBookings(res.data.data || res.data.bookings || []);
+        // Smart mapping: checks data, then bookings, then defaults to empty array
+        const fetchedBookings = res.data.data || res.data.bookings || [];
+        setBookings(fetchedBookings);
       } else {
         setBookings([]);
       }
     } catch (err) {
-      console.error('Error fetching bookings:', err);
+      console.error('FULL ERROR:', err.response?.data || err.message);
+      
+      // 🚨 401 Catch: If the backend rejects the token, tell the user!
+      if (err.response?.status === 401) {
+        setErrorMessage("Your session has expired. Please log out and log back in to see your tickets.");
+      } else {
+        setErrorMessage("Failed to load bookings. Our servers might be taking a nap.");
+      }
       setBookings([]);
     } finally {
       setLoading(false);
     }
   };
+
   const handleCancelBooking = async (bookingId) => {
     if (!window.confirm('Are you sure you want to cancel this ticket? Seats will be released.')) {
       return;
     }
 
     try {
-      const token = localStorage.getItem('token'); // 👈 Grab token for cancellation too
+      const token = localStorage.getItem('token');
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const userId = payload.userId || payload.id || payload._id;
       
-      // 🎯 FIXED URL: Singular '/booking/'
       const res = await axiosClient.post('/booking/cancel-booking', {
         bookingId,
-        userId: user._id || user.id,
+        userId: userId,
       }, {
-        headers: { Authorization: `Bearer ${token}` } // 🎯 FIXED HEADER
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.data?.success) {
         alert('🎟️ Ticket cancelled successfully!');
-        fetchBookings(); // Refresh tickets list
+        fetchBookings(); // Refresh tickets list to show CANCELLED status
       } else {
         alert(res.data?.message || 'Failed to cancel booking.');
       }
@@ -86,13 +101,20 @@ const fetchBookings = async () => {
       <div className="container py-4">
         <h3 className="fw-bold mb-4">🎟️ My Booked Tickets</h3>
 
+        {/* 🚨 SMART ERROR UI: If there's a 401 or crash, it shows up here */}
+        {errorMessage && (
+          <div className="alert alert-danger shadow-sm text-center fw-bold py-3">
+            {errorMessage}
+          </div>
+        )}
+
         {loading ? (
           <div className="text-center py-5">
             <div className="spinner-border text-danger" role="status">
               <span className="visually-hidden">Loading...</span>
             </div>
           </div>
-        ) : bookings.length === 0 ? (
+        ) : !errorMessage && bookings.length === 0 ? (
           <div className="card border-0 shadow-sm p-5 text-center rounded-3">
             <h5 className="text-secondary fw-bold mb-2">No Bookings Found</h5>
             <p className="text-muted small">You haven't booked any movie tickets yet.</p>
@@ -100,16 +122,16 @@ const fetchBookings = async () => {
         ) : (
           <div className="row g-4">
             {bookings.map((b) => {
-              const show = b.show;
-              const movie = show?.movie;
-              const theater = show?.theater;
+              // Safely extract nested data with fallbacks
+              const show = b.show || {};
+              const movie = show.movie || {};
+              const theater = show.theater || {};
               const status = b.status || 'BOOKED';
               const isCancelled = status === 'CANCELLED';
 
-              // 🎯 Fixed Date Comparison: Create clean start-of-today object
               const today = new Date();
               today.setHours(0, 0, 0, 0);
-              const showDate = show?.date ? new Date(show.date) : null;
+              const showDate = show.date ? new Date(show.date) : null;
               const isExpired = showDate ? showDate < today : false;
 
               return (
@@ -117,7 +139,7 @@ const fetchBookings = async () => {
                   <div className={`card border-0 shadow-sm rounded-3 overflow-hidden ${isCancelled ? 'opacity-75' : ''}`}>
                     <div className="bg-dark text-white p-3 d-flex justify-content-between align-items-center">
                       <span className="fw-bold text-capitalize text-truncate me-2" style={{ maxWidth: '180px' }}>
-                        {movie?.title || 'Movie'}
+                        {movie.title || 'Unknown Movie'}
                       </span>
                       <span className={`badge ${isCancelled ? 'bg-secondary' : 'bg-success'}`}>
                         {status}
@@ -126,13 +148,13 @@ const fetchBookings = async () => {
 
                     <div className="card-body p-3">
                       <p className="small text-muted mb-1">
-                        🏛️ <strong>Theater:</strong> {theater?.name || 'N/A'} {theater?.city ? `(${theater.city})` : ''}
+                        🏛️ <strong>Theater:</strong> {theater.name || 'Unknown Theater'} {theater.city ? `(${theater.city})` : ''}
                       </p>
                       <p className="small text-muted mb-1">
                         📅 <strong>Date:</strong> {showDate ? showDate.toLocaleDateString() : 'N/A'}
                       </p>
                       <p className="small text-muted mb-1">
-                        ⏰ <strong>Time:</strong> {show?.time || 'N/A'}
+                        ⏰ <strong>Time:</strong> {show.time || 'N/A'}
                       </p>
                       <p className="small text-danger fw-bold mb-2">
                         🪑 <strong>Seats:</strong> {Array.isArray(b.seats) ? b.seats.join(', ') : 'N/A'}
