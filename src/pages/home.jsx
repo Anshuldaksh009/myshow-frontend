@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Slider from 'react-slick';
 // to avoid crash 
 const SafeSlider = Slider.default || Slider;
@@ -13,6 +14,9 @@ const Home = () => {
   const [movies, setMovies] = useState([]);
   const [filteredMovies, setFilteredMovies] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Ref to control the slick slider programmatically via custom arrows
+  const sliderRef = useRef(null);
   
   // Preset cities
   const CITIES = ['Panipat','Pune', 'Noida','Bhopal', 'Delhi', 'Mumbai', 'Bengaluru', 'Kolkata', 'Hyderabad'];
@@ -34,7 +38,6 @@ const Home = () => {
         setLoading(true);
         setError('');
 
-        // ✅ CORRECT: Starts with a single /movies
         const response = await axiosClient.get(`/movies/get-all?city=${selectedCity}`);        
         let movieData = [];
         if (response.data?.success && Array.isArray(response.data.data)) {
@@ -82,21 +85,21 @@ const Home = () => {
     localStorage.setItem('selectedCity', city);
   };
 
-  // ✅ FIXED: Allow both guests & logged-in users to view shows freely
   const handleBookTickets = (movieId) => {
     navigate(`/shows/${movieId}?city=${selectedCity}`);
   };
 
   const safeList = Array.isArray(filteredMovies) ? filteredMovies : [];
 
-  // Dynamic Slick Carousel settings based on movie count
+  // Slick Carousel settings
   const sliderSettings = {
     dots: false,
     infinite: safeList.length > 4,
     speed: 500,
     slidesToShow: Math.min(4, Math.max(1, safeList.length)),
     slidesToScroll: 1,
-    autoplay: safeList.length > 4,
+    autoplay: false, // Turned off autoplay so users control the arrows smoothly
+    arrows: false,   // We use custom custom buttons outside to control sliderRef
     responsive: [
       { breakpoint: 1024, settings: { slidesToShow: Math.min(3, safeList.length || 1) } },
       { breakpoint: 768, settings: { slidesToShow: Math.min(2, safeList.length || 1) } },
@@ -165,19 +168,60 @@ const Home = () => {
           </div>
         )}
 
-        {/* 🎬 RECOMMENDED MOVIES DISPLAY */}
+        {/* 🎬 RECOMMENDED MOVIES DISPLAY WITH CUSTOM SLIDER BUTTONS */}
         {!loading && !error && safeList.length > 0 && (
-          <div className="mb-5">
+          <div className="mb-5 position-relative">
             <h3 className="fw-bold mb-3">🔥 Recommended Movies in {selectedCity}</h3>
 
             {safeList.length >= 4 ? (
-              <SafeSlider {...sliderSettings}>
-                {safeList.map((movie) => (
-                  <div key={movie._id} className="px-2">
-                    <MovieCard movie={movie} handleImageError={handleImageError} handleBookTickets={handleBookTickets} />
-                  </div>
-                ))}
-              </SafeSlider>
+              <div className="position-relative px-2">
+                
+                {/* Left Arrow Button */}
+                <button
+                  onClick={() => sliderRef.current?.slickPrev()}
+                  className="position-absolute start-0 translate-middle-y z-3 bg-white border shadow-lg rounded-circle d-flex align-items-center justify-content-center"
+                  style={{ 
+                    width: '45px', 
+                    height: '45px', 
+                    left: '-15px', 
+                    top: '50%', 
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(-50%) scale(1)'}
+                >
+                  <ChevronLeft size={24} className="text-dark" />
+                </button>
+
+                {/* React Slick Slider */}
+                <SafeSlider ref={sliderRef} {...sliderSettings}>
+                  {safeList.map((movie) => (
+                    <div key={movie._id} className="px-2">
+                      <MovieCard movie={movie} handleImageError={handleImageError} handleBookTickets={handleBookTickets} />
+                    </div>
+                  ))}
+                </SafeSlider>
+
+                {/* Right Arrow Button */}
+                <button
+                  onClick={() => sliderRef.current?.slickNext()}
+                  className="position-absolute end-0 translate-middle-y z-3 bg-white border shadow-lg rounded-circle d-flex align-items-center justify-content-center"
+                  style={{ 
+                    width: '45px', 
+                    height: '45px', 
+                    right: '-15px', 
+                    top: '50%', 
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(-50%) scale(1)'}
+                >
+                  <ChevronRight size={24} className="text-dark" />
+                </button>
+
+              </div>
             ) : (
               <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-4">
                 {safeList.map((movie) => (

@@ -116,13 +116,13 @@ const Show = () => {
 
   const availableDays = generateAvailableDays();
 
-  // Group shows by Theater ID
+  // Group shows by Theater ID safely
   const theatersMap = {};
   shows.forEach((show) => {
-    const theaterId = show.theater?._id || 'unknown';
+    const theaterId = show.theater?._id || show.theater || 'unknown';
     if (!theatersMap[theaterId]) {
       theatersMap[theaterId] = {
-        theater: show.theater,
+        theater: typeof show.theater === 'object' ? show.theater : { name: 'Partner Cinema', city: selectedCity },
         shows: [],
       };
     }
