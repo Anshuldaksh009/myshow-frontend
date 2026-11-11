@@ -3,14 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const navigate = useNavigate();
-  
+
   // 1. 🎯 Add State to track if the mobile menu is open
   const [isOpen, setIsOpen] = useState(false);
 
   // Read token, userRole, and user object directly from localStorage
   const token = localStorage.getItem('token');
-  const userRole = localStorage.getItem('userRole'); 
-  
+  const userRole = localStorage.getItem('userRole');
+
   let user = {};
   try {
     user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -19,10 +19,10 @@ const Navbar = () => {
   }
 
   // Check if user is Admin
-  const isAdmin = 
-    userRole === 'admin' || 
-    userRole === 'Admin' || 
-    user?.role === 'admin' || 
+  const isAdmin =
+    userRole === 'admin' ||
+    userRole === 'Admin' ||
+    user?.role === 'admin' ||
     user?.isAdmin === true;
 
   // 🎯 Helper function to close menu after clicking a link
@@ -41,7 +41,7 @@ const Navbar = () => {
       <div className="container-fluid">
         {/* BRAND LOGO */}
         <Link className="navbar-brand d-flex align-items-center gap-2 fw-bold text-danger fs-4" to="/" onClick={closeMenu}>
-          <i className="bi bi-film"></i> BookMyShow
+          <i className="bi bi-film"></i> MyShow
         </Link>
 
         {/* 2. 🎯 Toggler Button now uses React onClick instead of Bootstrap JS */}
